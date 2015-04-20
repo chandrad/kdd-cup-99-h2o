@@ -1,4 +1,4 @@
-# KDD Cup 99 - H2O  
+# KDD Cup 99 - H2O and R  
 
 My try with [KDD Cup 99](http://kdd.ics.uci.edu/databases/kddcup99/task.html) using [H2O](http://0xdata.com/) and `R`.  
 
