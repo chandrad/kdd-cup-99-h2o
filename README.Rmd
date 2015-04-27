@@ -50,12 +50,29 @@ attacks and the "signature" of known attacks can be sufficient to catch novel
 variants. Based on this idea, we will experiment with different machine learning
 approaches.   
 
-# Connecting to H2O cluster  
+## Approach
+
+We will start by loading the data and do some exploratory data analysis using.
+Then we will build a classifier using `H2O` *random forest* implementation.  
+
+However, in our final approach we want to use clustering and anomality
+detection. We want our model to be able to work well with unknown attack types
+and also to give an approchimation of the closest attack type.   
+
+## Libraries and global settings used  
+
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+theme_set(theme_linedraw())
+library(pander)
+library(h2o)
+```
+
+## Connecting to H2O cluster  
 
 First we need to set the connection settings.  
 
 ```{r, message=FALSE, warning = FALSE}
-library(h2o)
 h2o_ip <- '169.254.206.2'
 h2o_port <- 54321
 ```
@@ -66,7 +83,7 @@ Now we can connect to our cluster.
 jupiterH2O <- h2o.init(ip = h2o_ip, port=h2o_port)
 ```
 
-# Reading data 
+## Reading data 
 
 Now we are ready to read our data files. We have it stored in the 
 cluster's NFS structure. In H2O, we assign logical names to those data files 
@@ -110,7 +127,7 @@ Finally we can sumarise as we do with regular data frames.
 summary(kdd_data.hex)
 ```
 
-# Data exploration  
+## Data exploration  
 
 The good thing about using `H2O` from R is that we have access to the usual way
 of exploring data with R. We just need to use the way of applying functions 
@@ -137,10 +154,9 @@ if (!is.factor(by_label_means$C42)) {
 }
 ```
 
-Now we can plot using `ggplot`.  
+Now we can plot using `ggplot`. Let's see the mean duration by label.    
 
 ```{r, fig.width=10, fig.height=4}
-library(ggplot2)
 ggplot(data=by_label_means, aes(x=C42, y=C1)) +
     geom_bar(stat="identity", color="grey", fill="lightblue") +
     xlab("Label") +
@@ -148,3 +164,87 @@ ggplot(data=by_label_means, aes(x=C42, y=C1)) +
     ylab("Duration")
 ```
 
+## Training a classifier  
+
+The `H2O` framework offers a rich machine learning library. In this case we will
+train a *random forest* classifier. We will try with every single predictor.  
+
+```{r, cache=TRUE}
+system.time(
+    kdd_data.rf <- h2o.randomForest(y = 42, x = c(1:41), data = kdd_data.hex, 
+                                ntree = 100, depth = 500)
+)
+```
+
+We have just trained a *random forest* for more than 4 million entries of data 
+and 41 predictors.  
+
+We can print the resulting tree object, that contains among other things a
+confusion matrix.  
+
+```{r}
+print(kdd_data.rf)
+```
+
+
+###  Predicting labels using testing data  
+
+```{r}
+kdd_data.rf.pred <- h2o.predict(kdd_data.rf, newdata=kdd_corrected.hex)
+head(kdd_data.rf.pred)
+```
+
+Get accuracy (h2o result gives problems with colums 20 and 22, don't know why...).  
+
+```{r}
+accuracies <- sapply(
+    c(1:19,21,23), 
+    function(x) {  h2o.performance(kdd_data.rf.pred[,x+1], kdd_corrected.hex$C42==label_names[x])@model$accuracy }
+    )
+accuracy <- mean(accuracies)
+```
+
+Plot accuracies.  
+
+```{r, fig.width=10, fig.height=4}
+accuracies.df <- data.frame(label=label_names[c(1:19,21,23)], accuracy=accuracies)
+ggplot(data=accuracies.df, aes(x=label, y=accuracy)) +
+    geom_bar(stat="identity", color="grey", fill="lightblue") +
+    xlab("Label") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    ylab("Prediction accuracy")
+```
+
+
+## Clustering data  
+
+Clustering by using *k-means* is as easy as use the corresponsing part of the 
+`H2O` library for `R`.  
+
+We will cluster for `k = 40` (at least we have 23 different labels in our 
+dataset). Of course we don't use the label to cluster the data. Moreover k-means
+just works with numeric data, we can't use some predictors like they are such as
+`protocol`, `service`, or `flag`.  
+
+```{r, cache=TRUE}
+system.time(
+    kdd_data.km <- h2o.kmeans(
+        data = kdd_data.hex, 
+        centers = 40, 
+        cols = c(1,5:41), 
+        normalize=T,
+        iter.max=10)
+)
+```
+
+The clustering process is faster than training a *random forest* but not by a lot.  
+
+Sadly, the current *k-means* implementation doesn't return the cluster to data 
+assignments. If we see the documentation it was there before, but we can't find it
+in the version we used in this analysis.  
+
+But we can print the contains of the resulting object.  
+
+```{r}
+kdd_data.km
+```
