@@ -45,12 +45,12 @@ approaches.
 
 ## Approach
 
-We will start by loading the data and do some exploratory data analysis using.
-Then we will build a classifier using `H2O` *random forest* implementation.  
+We will start by loading the data and do some exploratory data analysis using `R`.
+Then we will build a classifier using `H2O`'s *random forest* implementation.  
 
 However, in our final approach we want to use clustering and anomality
 detection. We want our model to be able to work well with unknown attack types
-and also to give an approchimation of the closest attack type.   
+and also to give an approximation of the closest attack type.   
 
 ## Libraries and global settings used  
 
